@@ -1,6 +1,8 @@
+const Account = require("../models/Account");
+const User = require("../models/User");
 const zod = require("zod");
-const jwt = require("json-web-token");
-import User from "../models/User"
+const jwt = require("jsonwebtoken");
+
 
 require("dotenv").config();
 
@@ -15,7 +17,7 @@ const signupSchema = zod.object({
 
 });
 
-const signup = async(req,res) => {
+exports.signup = async(req,res) => {
     try{
         const data = req.body;
         const {success}  = signupSchema.safeParse(req.body);
@@ -27,7 +29,7 @@ const signup = async(req,res) => {
             })
         }
 
-        const existingUser = await User.findOne({
+        const existingUser = await User.find({
                                     userName: data.userName
                                 })
 
@@ -38,11 +40,15 @@ const signup = async(req,res) => {
             })
         }
 
-        const user = await User.create(body);
+        const user = await User.create(data);
         const token = jwt.sign({
             userId: user._id
         },process.env.JWT_SECRET);
 
+        await Account.create({
+                            userId: user._id,
+                            balance: 1 + Math.random() * 10000
+        })
 
         return res.status(200).json({
             success:true,
@@ -51,6 +57,7 @@ const signup = async(req,res) => {
         })
                             
     }catch(error){
+        console.log(error);
         return res.status(500).json({
             success:false,
             message:error.message,
@@ -61,11 +68,11 @@ const signup = async(req,res) => {
 
 //login
 const loginSchema = zod.object({
-    userName: zod.string(),
+    userName: zod.string().email(),
     password: zod.string(),
 })
 
-const login = async(req,res) => {
+exports.login = async(req,res) => {
     try{
         const data = req.body;
         const {success} = loginSchema.safeParse(data);
@@ -99,7 +106,7 @@ const login = async(req,res) => {
 
         return res.status(200).json({
             success:true,
-            message:"User created successfully ",
+            message:"User loggedin successfully ",
             token
         })
 
@@ -118,7 +125,7 @@ const updatedSchema = zod.object({
     lastName: zod.string().optional(),
 })
 
-const updateProfile = async(req,res) => {
+exports.updateProfile = async(req,res) => {
     try{
         const id = req.userId;
         const data = req.body;
@@ -146,4 +153,35 @@ const updateProfile = async(req,res) => {
     }
 }
 
-//
+//get user by name
+exports.getByName = async(req,res) => {
+    try{
+        const filter = req.query.filter || "";
+
+        const users = await User.find({
+             $or: [{
+                firstName: {
+                    "$regex": filter
+                }
+            }, {
+                lastName: {
+                    "$regex": filter
+                }
+            }]
+        })
+
+        return res.status(200).json({
+            user: users.map(user => ({
+                username: user.username,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                _id: user._id
+            }))
+        })
+    }catch(error){
+        return res.status(500).json({
+            success:false,
+            message:error.message,
+        })
+    }
+}
